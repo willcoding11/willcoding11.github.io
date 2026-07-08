@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.willcoding11.brokeragedb",
+    "sha256_cert_fingerprints": ["62:49:A4:ED:8E:97:CD:A7:91:98:DC:79:F8:87:19:D6:11:1D:E2:10:78:FF:57:89:58:03:39:0E:B3:1B:D1:64"]
+  }
+}]
