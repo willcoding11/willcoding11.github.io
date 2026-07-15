@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Evolve · natural-selection lab</title>
+  <meta name="theme-color" content="#0b1220" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>🧬 Evolve</h1>
+    <div class="status" id="status">Loading…</div>
+  </header>
+
+  <main>
+    <!-- PREVIEWS -->
+    <section class="previews">
+      <div class="preview">
+        <canvas id="pvBest"></canvas>
+        <div class="pv-label" id="lbBest">🏆 Best</div>
+      </div>
+      <div class="preview">
+        <canvas id="pvMedian"></canvas>
+        <div class="pv-label" id="lbMedian">➖ Median</div>
+      </div>
+      <div class="preview">
+        <canvas id="pvWorst"></canvas>
+        <div class="pv-label" id="lbWorst">💀 Worst</div>
+      </div>
+    </section>
+
+    <!-- RUN CONTROLS -->
+    <section class="runbar">
+      <button id="runBtn" class="primary">▶ Run 1 generation</button>
+      <button id="autoBtn">▶ Auto-run</button>
+      <button id="resetBtn" class="ghost">↺ Reset</button>
+      <label class="speed">
+        Preview speed <span id="speedVal">1×</span>
+        <input id="speed" type="range" min="1" max="8" step="1" value="1" />
+      </label>
+      <div class="progress-wrap"><div id="progress" class="progress"></div></div>
+    </section>
+
+    <!-- STATS -->
+    <section class="stats">
+      <div class="stat"><span>Generation</span><b id="genNum">0</b></div>
+      <div class="stat"><span>Best</span><b id="bestVal">—</b></div>
+      <div class="stat"><span>Average</span><b id="avgVal">—</b></div>
+      <div class="stat"><span>Survived</span><b id="survVal">—</b></div>
+    </section>
+
+    <section class="chart-card">
+      <canvas id="chart"></canvas>
+    </section>
+
+    <!-- CONFIG -->
+    <section class="config">
+      <details open>
+        <summary>Population &amp; selection</summary>
+        <div class="grid">
+          <label>Creatures per generation
+            <input id="population" type="number" min="4" max="500" value="60" />
+          </label>
+          <label>Simulation steps (life span)
+            <input id="steps" type="number" min="120" max="4000" step="60" value="900" />
+          </label>
+          <label>Goal
+            <select id="goal"></select>
+          </label>
+          <label>Killed per generation <span id="killFractionVal">50%</span>
+            <input id="killFraction" type="range" min="0" max="95" value="50" />
+          </label>
+          <label>Killing gradient (steepness) <span id="gradientVal">12</span>
+            <input id="gradient" type="range" min="1" max="60" value="12" />
+            <small>Low = soft/random culling · High = hard cutoff at the kill line</small>
+          </label>
+          <div class="curve-wrap">
+            <span class="curve-title">Survival pressure preview</span>
+            <canvas id="killCurve"></canvas>
+          </div>
+          <div id="targetRow" class="target-row">
+            <label>Target X <input id="targetX" type="number" value="8" step="0.5" /></label>
+            <label>Target Y <input id="targetY" type="number" value="6" step="0.5" /></label>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Mutation &amp; reproduction</summary>
+        <div class="grid">
+          <label>Mutation rate <span id="mutationRateVal">15%</span>
+            <input id="mutationRate" type="range" min="0" max="100" value="15" />
+          </label>
+          <label>Mutation step size
+            <input id="mutationStep" type="number" min="0.01" max="2" step="0.01" value="0.35" />
+          </label>
+          <label class="check"><input id="crossover" type="checkbox" checked /> Sexual reproduction (crossover)</label>
+          <label class="check"><input id="evolveBody" type="checkbox" checked /> Evolve body (friction &amp; shape)</label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Creature body plan</summary>
+        <div class="grid">
+          <label>Min nodes <input id="minNodes" type="number" min="2" max="20" value="4" /></label>
+          <label>Max nodes <input id="maxNodes" type="number" min="2" max="20" value="7" /></label>
+          <label>Muscle density
+            <input id="muscleDensity" type="number" min="1" max="4" step="0.1" value="1.6" />
+          </label>
+          <label>Brain neurons (hidden)
+            <input id="hidden" type="number" min="2" max="32" value="10" />
+          </label>
+          <label>Gravity
+            <input id="gravity" type="number" min="0" max="0.1" step="0.005" value="0.02" />
+          </label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Define a custom creature (advanced)</summary>
+        <div class="body-editor">
+          <p class="hint">Paste a body as JSON. <b>nodes</b> = point masses
+            (<code>x</code>, <code>y</code>, <code>friction</code> 0–1).
+            <b>muscles</b> connect two node indices with a
+            <code>contract</code> swing (0–1). Every creature gets a fresh
+            evolving brain wired to your muscles. Then press Reset.</p>
+          <textarea id="bodyJson" spellcheck="false" placeholder='{ "nodes": [...], "muscles": [...] }'></textarea>
+          <div class="editor-btns">
+            <button id="exampleBody" class="ghost">Load example</button>
+            <button id="applyBody">Validate</button>
+            <button id="clearBody" class="ghost">Clear (random)</button>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <footer>
+      <p>Nodes are colored by friction (cyan = slippery, orange = grippy).
+         Muscles glow red when contracting, green when extending. Add this page
+         to your home screen to run it full-screen and offline.</p>
+    </footer>
+  </main>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

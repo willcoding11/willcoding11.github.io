@@ -1,0 +1,89 @@
+:root{
+  --bg:#0b1220; --panel:#111a2e; --panel2:#0d1526; --line:#22314e;
+  --ink:#e7ecf5; --muted:#8ea0bd; --accent:#4ade80; --accent2:#5aa9ff;
+  --danger:#f87171; --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  padding-bottom:env(safe-area-inset-bottom);
+  -webkit-text-size-adjust:100%;
+}
+.topbar{
+  position:sticky; top:0; z-index:5;
+  display:flex; align-items:center; gap:12px;
+  padding:10px 14px calc(10px); padding-top:calc(10px + env(safe-area-inset-top));
+  background:linear-gradient(180deg,#0b1220,#0b1220ee);
+  border-bottom:1px solid var(--line); backdrop-filter:blur(6px);
+}
+.topbar h1{font-size:18px;margin:0;letter-spacing:.5px}
+.status{font-size:12px;color:var(--muted);flex:1;text-align:right}
+main{max-width:1000px;margin:0 auto;padding:12px}
+
+/* previews */
+.previews{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:720px){.previews{grid-template-columns:repeat(3,1fr)}}
+.preview{position:relative;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--panel2)}
+.preview canvas{display:block;width:100%;height:190px}
+@media(min-width:720px){.preview canvas{height:210px}}
+.pv-label{position:absolute;left:8px;top:8px;font-size:12px;font-weight:600;
+  background:rgba(0,0,0,.5);padding:3px 8px;border-radius:8px;backdrop-filter:blur(2px)}
+
+/* run bar */
+.runbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}
+button{
+  font:inherit;font-weight:600;color:var(--ink);
+  background:var(--panel);border:1px solid var(--line);
+  padding:10px 14px;border-radius:10px;cursor:pointer;
+  min-height:44px; touch-action:manipulation;
+}
+button:active{transform:translateY(1px)}
+button.primary{background:linear-gradient(180deg,#1f9d5a,#158048);border-color:#0f6b3c}
+button.ghost{background:transparent;color:var(--muted)}
+.speed{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:2px;min-width:130px}
+.speed input{width:100%}
+.progress-wrap{flex:1;min-width:100px;height:6px;background:var(--panel);border-radius:6px;overflow:hidden}
+.progress{height:100%;width:0;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .1s}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+.stat span{display:block;font-size:11px;color:var(--muted)}
+.stat b{font-size:18px}
+
+/* chart */
+.chart-card{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:6px;margin-bottom:14px}
+#chart{display:block;width:100%;height:150px}
+
+/* config */
+.config details{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.config summary{cursor:pointer;padding:12px 14px;font-weight:600;user-select:none}
+.config summary::-webkit-details-marker{color:var(--accent)}
+.grid{display:grid;grid-template-columns:1fr;gap:12px;padding:4px 14px 16px}
+@media(min-width:560px){.grid{grid-template-columns:1fr 1fr}}
+label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted)}
+label small{color:#6b7a94;font-size:11px}
+input,select,textarea{
+  font:inherit;color:var(--ink);background:var(--panel2);
+  border:1px solid var(--line);border-radius:9px;padding:9px 10px;min-height:42px;
+}
+input[type=range]{padding:0;min-height:auto}
+label.check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:14px}
+label.check input{min-height:auto;width:20px;height:20px}
+.target-row{display:flex;gap:10px;grid-column:1/-1}
+.target-row label{flex:1}
+.curve-wrap{grid-column:1/-1;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px}
+.curve-title{font-size:11px;color:var(--muted)}
+#killCurve{display:block;width:100%;height:80px;margin-top:4px}
+
+/* body editor */
+.body-editor{padding:4px 14px 16px}
+.hint{font-size:12px;color:var(--muted);margin:6px 0}
+.hint code{background:var(--panel2);padding:1px 5px;border-radius:5px;color:var(--accent2)}
+#bodyJson{width:100%;height:150px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;resize:vertical}
+.editor-btns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+
+footer{color:#6b7a94;font-size:12px;padding:8px 4px 30px}
+footer code{color:var(--accent2)}

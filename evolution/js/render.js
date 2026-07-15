@@ -1,0 +1,105 @@
+// render.js — draw a live sim into a canvas with a follow-camera.
+
+export function makeRenderer(canvas) {
+  const ctx = canvas.getContext('2d');
+  let camX = 0, camY = 0, scale = 46;
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const r = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.round(r.width * dpr));
+    canvas.height = Math.max(1, Math.round(r.height * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function frictionColor(f) {
+    // low friction = cyan (slippery), high friction = orange (grippy)
+    const hue = 190 - f * 170;
+    return `hsl(${hue}, 70%, 55%)`;
+  }
+
+  function draw(sim, opts = {}) {
+    const r = canvas.getBoundingClientRect();
+    const W = r.width, H = r.height;
+    const c = sim.centroid();
+    // smooth camera follow
+    camX += (c.x - camX) * 0.1;
+    camY += (c.y - camY) * 0.1;
+
+    const groundScreenY = H * 0.72;
+    function sx(x) { return W / 2 + (x - camX) * scale; }
+    function sy(y) { return groundScreenY + (y - sim.world.groundY) * scale + (sim.world.groundY - camY) * 0; }
+    // Simpler vertical mapping: ground fixed on screen, world y offset by cam not applied vertically
+    function wy(y) { return groundScreenY + (y - sim.world.groundY) * scale; }
+
+    ctx.clearRect(0, 0, W, H);
+
+    // sky gradient
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0b1220');
+    g.addColorStop(1, '#111a2e');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // ground
+    ctx.fillStyle = '#1c2b16';
+    ctx.fillRect(0, groundScreenY, W, H - groundScreenY);
+    ctx.strokeStyle = '#3a5c2a';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, groundScreenY); ctx.lineTo(W, groundScreenY); ctx.stroke();
+
+    // distance grid marks (every 1 unit)
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.font = '10px system-ui, sans-serif';
+    const start = Math.floor(camX - W / (2 * scale)) - 1;
+    const end = Math.ceil(camX + W / (2 * scale)) + 1;
+    for (let m = start; m <= end; m++) {
+      const x = sx(m);
+      ctx.fillRect(x, groundScreenY, 1, 8);
+      if (m % 2 === 0) ctx.fillText(m + 'm', x + 2, groundScreenY + 18);
+    }
+
+    // optional target marker
+    if (opts.target) {
+      const tx = sx(opts.target.x), ty = wy(opts.target.y);
+      ctx.strokeStyle = '#ffd24a';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(tx, ty, 10, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(tx - 14, ty); ctx.lineTo(tx + 14, ty);
+      ctx.moveTo(tx, ty - 14); ctx.lineTo(tx, ty + 14); ctx.stroke();
+    }
+
+    // muscles
+    ctx.lineWidth = 4;
+    for (const m of sim.muscles) {
+      const a = sim.nodes[m.a], b = sim.nodes[m.b];
+      // color by contraction state: red = contracting, green = extending
+      const range = (m.max - m.min) || 1e-6;
+      const t = ((m.target ?? m.rest) - m.min) / range; // 0 contracted .. 1 extended
+      const hue = 0 + t * 130; // red -> green
+      ctx.strokeStyle = `hsl(${hue}, 75%, 50%)`;
+      ctx.beginPath();
+      ctx.moveTo(sx(a.x), wy(a.y));
+      ctx.lineTo(sx(b.x), wy(b.y));
+      ctx.stroke();
+    }
+
+    // nodes
+    for (const n of sim.nodes) {
+      ctx.beginPath();
+      ctx.arc(sx(n.x), wy(n.y), 7, 0, Math.PI * 2);
+      ctx.fillStyle = frictionColor(n.friction);
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.stroke();
+    }
+  }
+
+  function recenter(sim) {
+    const c = sim.centroid();
+    camX = c.x; camY = c.y;
+  }
+
+  return { draw, resize, recenter };
+}
