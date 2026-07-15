@@ -45,6 +45,44 @@ let customBody = null;  // optional user-defined body
 let running = false;
 let busy = false;
 
+// ---- species tracking --------------------------------------------------
+// A "species" is a distinct body topology: node count + muscle count +
+// degree sequence (so wiring differences count, but node ordering doesn't).
+let speciesHistory = [];             // [{gen, total, counts:{key:n}}]
+const speciesColors = new Map();     // key -> hsl color, stable across gens
+let speciesColorIdx = 0;
+
+function speciesKey(g) {
+  const N = g.nodes.length;
+  const deg = new Array(N).fill(0);
+  for (const m of g.muscles) { deg[m.a]++; deg[m.b]++; }
+  deg.sort((a, b) => a - b);
+  return `${N}|${g.muscles.length}|${deg.join(',')}`;
+}
+function speciesLabel(key) {
+  const [n, m] = key.split('|');
+  return `${n}n·${m}m`;
+}
+function speciesColor(key) {
+  if (!speciesColors.has(key)) {
+    // golden-angle hue stepping keeps successive species visually distinct
+    const hue = (speciesColorIdx * 137.508) % 360;
+    const light = 50 + (speciesColorIdx % 3) * 7;
+    speciesColors.set(key, `hsl(${hue.toFixed(0)}, 68%, ${light}%)`);
+    speciesColorIdx++;
+  }
+  return speciesColors.get(key);
+}
+function recordSpecies(scored) {
+  const counts = {};
+  for (const s of scored) {
+    const key = speciesKey(s.genome);
+    counts[key] = (counts[key] || 0) + 1;
+    speciesColor(key); // assign color on first sighting
+  }
+  speciesHistory.push({ gen: generation + 1, total: scored.length, counts });
+}
+
 function buildPopulation(cfg) {
   const pop = [];
   for (let i = 0; i < cfg.population; i++) {
@@ -68,8 +106,12 @@ function resetSim() {
   generation = 0;
   history = [];
   lastScored = null;
+  speciesHistory = [];
+  speciesColors.clear();
+  speciesColorIdx = 0;
   setStatus('Fresh population of ' + cfg.population + ' creatures. Run a generation.');
   drawChart();
+  drawSpeciesChart();
   updateStats(null);
 }
 
@@ -109,6 +151,7 @@ async function runGeneration() {
   const best = scored[0].score;
   const avg = scored.reduce((s, x) => s + x.score, 0) / scored.length;
   history.push({ gen: generation + 1, best, avg });
+  recordSpecies(scored);
 
   // pick previews from THIS evaluated generation
   setPreviews(scored);
@@ -120,6 +163,7 @@ async function runGeneration() {
 
   updateStats({ best, avg, survivors: survivors.length, total: scored.length });
   drawChart();
+  drawSpeciesChart();
   setStatus(`Generation ${generation} done — best ${best.toFixed(2)}${GOALS[cfg.goal].unit}, ` +
             `${survivors.length}/${scored.length} survived.`);
   busy = false;
@@ -292,6 +336,113 @@ function drawChart() {
   ctx.fillText('average', W - pad - 60, pad + 18);
 }
 
+// ---- species dominance chart (stacked area of body topologies) ---------
+function drawSpeciesChart() {
+  const canvas = $('speciesChart');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const r = canvas.getBoundingClientRect();
+  canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = r.width, H = r.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0d1526'; ctx.fillRect(0, 0, W, H);
+
+  const legend = $('speciesLegend');
+  if (speciesHistory.length < 1) {
+    ctx.fillStyle = '#6b7a94'; ctx.font = '12px system-ui';
+    ctx.fillText('Species (body plans) over generations appears here', 10, H / 2);
+    if (legend) legend.innerHTML = '';
+    return;
+  }
+
+  // rank species by total prevalence; show top N, lump the rest as "Other"
+  const totals = {};
+  for (const gen of speciesHistory)
+    for (const k in gen.counts) totals[k] = (totals[k] || 0) + gen.counts[k];
+  const ranked = Object.keys(totals).sort((a, b) => totals[b] - totals[a]);
+  const TOP = 9;
+  const shown = ranked.slice(0, TOP);
+  const shownSet = new Set(shown);
+  const hasOther = ranked.length > TOP;
+
+  // stacking order: dominant at the bottom, "Other" on top
+  const order = shown.slice();
+  const pad = 4;
+  const plotW = W - pad * 2, plotH = H - pad * 2;
+  const n = speciesHistory.length;
+  const xAt = i => pad + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+
+  // proportion of a species key in generation g
+  const prop = (g, key) => (g.counts[key] || 0) / g.total;
+  const otherProp = g => {
+    let s = 0; for (const k in g.counts) if (!shownSet.has(k)) s += g.counts[k];
+    return s / g.total;
+  };
+
+  const bands = order.map(k => ({ key: k, color: speciesColor(k) }));
+  if (hasOther) bands.push({ key: '__other__', color: '#5b6472' });
+
+  // cumulative baseline per generation (top = 0, grows downward)
+  const base = new Array(n).fill(0);
+  for (const band of bands) {
+    ctx.fillStyle = band.color;
+    ctx.beginPath();
+    // top edge left->right
+    for (let i = 0; i < n; i++) {
+      const p = band.key === '__other__' ? otherProp(speciesHistory[i]) : prop(speciesHistory[i], band.key);
+      const yTop = pad + base[i] * plotH;
+      const x = xAt(i);
+      i ? ctx.lineTo(x, yTop) : ctx.moveTo(x, yTop);
+      base[i] += p;
+    }
+    // bottom edge right->left (new cumulative)
+    for (let i = n - 1; i >= 0; i--) {
+      const yBot = pad + base[i] * plotH;
+      ctx.lineTo(xAt(i), yBot);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // for a single generation the area collapses to a line, so redraw it as a
+  // centered vertical bar for clarity
+  if (n === 1) {
+    ctx.fillStyle = '#0d1526'; ctx.fillRect(0, 0, W, H);
+    let acc = 0;
+    const bw = Math.min(plotW, 120), bx = (W - bw) / 2;
+    for (const band of bands) {
+      const g = speciesHistory[0];
+      const p = band.key === '__other__' ? otherProp(g) : prop(g, band.key);
+      ctx.fillStyle = band.color;
+      ctx.fillRect(bx, pad + acc * plotH, bw, p * plotH);
+      acc += p;
+    }
+  }
+
+  updateSpeciesLegend(shown, hasOther, totals);
+}
+
+function updateSpeciesLegend(shown, hasOther, totals) {
+  const legend = $('speciesLegend');
+  if (!legend) return;
+  const latest = speciesHistory[speciesHistory.length - 1];
+  // order legend by CURRENT share so live species lead, extinct ones trail
+  const ordered = shown.slice().sort((a, b) =>
+    (latest.counts[b] || 0) - (latest.counts[a] || 0));
+  const items = ordered.map(key => {
+    const pct = Math.round(((latest.counts[key] || 0) / latest.total) * 100);
+    return `<span class="sp"><i style="background:${speciesColor(key)}"></i>${speciesLabel(key)} <b>${pct}%</b></span>`;
+  });
+  if (hasOther) {
+    let o = 0; for (const k in latest.counts) if (!shown.includes(k)) o += latest.counts[k];
+    items.push(`<span class="sp"><i style="background:#5b6472"></i>Other <b>${Math.round(o / latest.total * 100)}%</b></span>`);
+  }
+  const distinct = Object.keys(totals).length;
+  legend.innerHTML = `<div class="sp-count">${distinct} species this run</div>` + items.join('');
+}
+
 // ---- selection-curve preview -------------------------------------------
 function drawKillCurve() {
   const canvas = $('killCurve');
@@ -399,7 +550,7 @@ function wire() {
 
   window.addEventListener('resize', () => {
     for (const k in previews) previews[k].renderer && previews[k].renderer.resize();
-    drawChart(); drawKillCurve();
+    drawChart(); drawKillCurve(); drawSpeciesChart();
   });
 }
 

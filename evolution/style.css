@@ -56,6 +56,13 @@ button.ghost{background:transparent;color:var(--muted)}
 /* chart */
 .chart-card{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:6px;margin-bottom:14px}
 #chart{display:block;width:100%;height:150px}
+.chart-title{font-size:12px;color:var(--muted);padding:4px 6px 2px;font-weight:600}
+#speciesChart{display:block;width:100%;height:140px;border-radius:8px}
+.species-legend{display:flex;flex-wrap:wrap;gap:6px 12px;padding:8px 6px 4px}
+.species-legend .sp-count{width:100%;font-size:11px;color:#6b7a94;margin-bottom:2px}
+.species-legend .sp{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink)}
+.species-legend .sp i{width:11px;height:11px;border-radius:3px;display:inline-block;flex:none}
+.species-legend .sp b{color:var(--muted);font-weight:600}
 
 /* config */
 .config details{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}

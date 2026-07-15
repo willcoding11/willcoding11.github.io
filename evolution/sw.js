@@ -1,5 +1,5 @@
 // sw.js — cache the app shell so Evolve runs offline once installed.
-const CACHE = 'evolve-v6';
+const CACHE = 'evolve-v7';
 const ASSETS = [
   './',
   './index.html',
