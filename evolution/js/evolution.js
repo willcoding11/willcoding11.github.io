@@ -19,8 +19,15 @@ function connectGraph(nodeCount, edges) {
   return edges;
 }
 
+// Uniform integer in [lo, hi] inclusive.
+function randInt(lo, hi) { return lo + Math.floor(Math.random() * (hi - lo + 1)); }
+
 export function randomGenome(cfg) {
-  const nCount = Math.round(rand(cfg.minNodes, cfg.maxNodes + 0.999));
+  // Respect the node limits exactly: clamp to >=2, tolerate min>max by swapping.
+  let lo = Math.max(2, Math.round(cfg.minNodes));
+  let hi = Math.max(2, Math.round(cfg.maxNodes));
+  if (lo > hi) { const t = lo; lo = hi; hi = t; }
+  const nCount = randInt(lo, hi);
   const nodes = [];
   for (let i = 0; i < nCount; i++) {
     nodes.push({
