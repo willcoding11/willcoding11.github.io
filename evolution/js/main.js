@@ -1,6 +1,6 @@
 // main.js — glue: read config, run the GA, animate best/median/worst previews.
 
-import { createSim, makeBrain } from './engine.js';
+import { createSim, makeBrain, clamp } from './engine.js';
 import {
   randomGenome, cloneGenome, select, reproduce, GOALS, killProbability,
 } from './evolution.js';
@@ -145,6 +145,7 @@ function initPreviews() {
     const canvas = $(p.canvas);
     p.renderer = makeRenderer(canvas);
     p.renderer.resize();
+    addZoomGestures(canvas);
   }
 }
 
@@ -164,19 +165,24 @@ function setPreviews(scored) {
     p.renderer.recenter(p.sim);
     p.steps = cfg.steps;
     p.frame = 0;
+    p.acc = 0;
   }
 }
 
-let previewSpeed = 1;
+let previewSpeed = 1;   // physics steps advanced per animation frame (fractional ok)
+let previewZoom = 1;
 function previewLoop() {
   const cfg = readConfig();
   const target = cfg.goal === 'reach' ? { x: cfg.targetX, y: cfg.targetY } : null;
   for (const k in previews) {
     const p = previews[k];
     if (!p.sim) { p.renderer && idleDraw(p); continue; }
-    for (let s = 0; s < previewSpeed && p.frame < p.steps; s++) {
+    // accumulator: at 0.1x we step once every ~10 frames; at 3x, 3 steps/frame
+    p.acc = (p.acc || 0) + previewSpeed;
+    while (p.acc >= 1 && p.frame < p.steps) {
       p.sim.step();
       p.frame++;
+      p.acc -= 1;
     }
     p.renderer.draw(p.sim, { target });
     const unit = GOALS[cfg.goal].unit;
@@ -188,9 +194,38 @@ function previewLoop() {
       p.sim = createSim(p.genome, { world: cfg.world });
       p.renderer.recenter(p.sim);
       p.frame = 0;
+      p.acc = 0;
     }
   }
   requestAnimationFrame(previewLoop);
+}
+
+function applyZoom(z) {
+  previewZoom = clamp(z, 0.3, 4);
+  for (const k in previews) previews[k].renderer && previews[k].renderer.setZoom(previewZoom);
+  const zs = $('zoom'); if (zs) zs.value = previewZoom;
+  const zv = $('zoomVal'); if (zv) zv.textContent = previewZoom.toFixed(1) + '×';
+}
+
+// wheel + pinch zoom directly on a preview canvas (updates the shared zoom)
+function addZoomGestures(canvas) {
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    applyZoom(previewZoom * (e.deltaY < 0 ? 1.12 : 1 / 1.12));
+  }, { passive: false });
+  let pinchStart = null, zoomStart = 1;
+  const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  canvas.addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const d = dist(e.touches);
+      if (pinchStart == null) { pinchStart = d; zoomStart = previewZoom; }
+      else applyZoom(zoomStart * d / pinchStart);
+    }
+  }, { passive: false });
+  const end = e => { if (e.touches.length < 2) pinchStart = null; };
+  canvas.addEventListener('touchend', end);
+  canvas.addEventListener('touchcancel', end);
 }
 
 function idleDraw(p) {
@@ -331,7 +366,8 @@ function wire() {
   $('runBtn').addEventListener('click', () => runGeneration());
   $('autoBtn').addEventListener('click', () => autoRun());
   $('resetBtn').addEventListener('click', () => resetSim());
-  $('speed').addEventListener('input', e => { previewSpeed = +e.target.value; $('speedVal').textContent = previewSpeed + '×'; });
+  $('speed').addEventListener('input', e => { previewSpeed = +e.target.value; $('speedVal').textContent = previewSpeed.toFixed(1) + '×'; });
+  $('zoom').addEventListener('input', e => applyZoom(+e.target.value));
   $('applyBody').addEventListener('click', applyCustomBody);
   $('exampleBody').addEventListener('click', () => {
     $('bodyJson').value = JSON.stringify(EXAMPLE_BODY, null, 2);

@@ -2,7 +2,7 @@
 
 export function makeRenderer(canvas) {
   const ctx = canvas.getContext('2d');
-  let camX = 0, camY = 0, scale = 46;
+  let camX = 0, baseScale = 46, zoom = 1, viewY = 0;
 
   function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -22,15 +22,26 @@ export function makeRenderer(canvas) {
     const r = canvas.getBoundingClientRect();
     const W = r.width, H = r.height;
     const c = sim.centroid();
-    // smooth camera follow
+    // smooth horizontal camera follow
     camX += (c.x - camX) * 0.1;
-    camY += (c.y - camY) * 0.1;
 
+    const scale = baseScale * zoom;
     const groundScreenY = H * 0.72;
+
+    // Vertical follow — engages ONLY when the creature climbs above the top
+    // of the normal view. On the ground viewY eases back to 0 so the ground
+    // sits in its usual place; jump high and the world scrolls down to keep
+    // the creature in frame.
+    const topMargin = 30;
+    const b = sim.bounds();
+    const topAtRest = groundScreenY + (b.minY - sim.world.groundY) * scale;
+    const desiredView = Math.max(0, topMargin - topAtRest);
+    viewY += (desiredView - viewY) * 0.12;
+    if (viewY < 0.5) viewY = 0;
+    const gy = groundScreenY + viewY; // on-screen ground line
+
     function sx(x) { return W / 2 + (x - camX) * scale; }
-    function sy(y) { return groundScreenY + (y - sim.world.groundY) * scale + (sim.world.groundY - camY) * 0; }
-    // Simpler vertical mapping: ground fixed on screen, world y offset by cam not applied vertically
-    function wy(y) { return groundScreenY + (y - sim.world.groundY) * scale; }
+    function wy(y) { return gy + (y - sim.world.groundY) * scale; }
 
     ctx.clearRect(0, 0, W, H);
 
@@ -41,12 +52,14 @@ export function makeRenderer(canvas) {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    // ground
-    ctx.fillStyle = '#1c2b16';
-    ctx.fillRect(0, groundScreenY, W, H - groundScreenY);
+    // ground (drawn at the shifted ground line gy)
+    if (gy < H) {
+      ctx.fillStyle = '#1c2b16';
+      ctx.fillRect(0, gy, W, H - gy);
+    }
     ctx.strokeStyle = '#3a5c2a';
     ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, groundScreenY); ctx.lineTo(W, groundScreenY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
 
     // distance grid marks (every 1 unit)
     ctx.fillStyle = 'rgba(255,255,255,0.10)';
@@ -55,8 +68,21 @@ export function makeRenderer(canvas) {
     const end = Math.ceil(camX + W / (2 * scale)) + 1;
     for (let m = start; m <= end; m++) {
       const x = sx(m);
-      ctx.fillRect(x, groundScreenY, 1, 8);
-      if (m % 2 === 0) ctx.fillText(m + 'm', x + 2, groundScreenY + 18);
+      ctx.fillRect(x, gy, 1, 8);
+      if (m % 2 === 0) ctx.fillText(m + 'm', x + 2, gy + 18);
+    }
+
+    // height ruler on the left while the camera is lifted
+    if (viewY > 4) {
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.font = '10px system-ui, sans-serif';
+      for (let hm = 2; ; hm += 2) {
+        const yy = wy(sim.world.groundY - hm);
+        if (yy < 10) break;
+        if (yy > gy) continue;
+        ctx.fillRect(0, yy, 8, 1);
+        ctx.fillText(hm + 'm', 10, yy + 3);
+      }
     }
 
     // optional target marker
@@ -69,8 +95,10 @@ export function makeRenderer(canvas) {
       ctx.moveTo(tx, ty - 14); ctx.lineTo(tx, ty + 14); ctx.stroke();
     }
 
-    // muscles
-    ctx.lineWidth = 4;
+    // muscles (line width tracks zoom so creatures look proportional)
+    const muscleW = Math.max(1.5, 4 * zoom);
+    const nodeR = Math.max(2.5, 7 * zoom);
+    ctx.lineWidth = muscleW;
     for (const m of sim.muscles) {
       const a = sim.nodes[m.a], b = sim.nodes[m.b];
       // color by contraction state: red = contracting, green = extending
@@ -87,7 +115,7 @@ export function makeRenderer(canvas) {
     // nodes
     for (const n of sim.nodes) {
       ctx.beginPath();
-      ctx.arc(sx(n.x), wy(n.y), 7, 0, Math.PI * 2);
+      ctx.arc(sx(n.x), wy(n.y), nodeR, 0, Math.PI * 2);
       ctx.fillStyle = frictionColor(n.friction);
       ctx.fill();
       ctx.lineWidth = 1.5;
@@ -98,8 +126,11 @@ export function makeRenderer(canvas) {
 
   function recenter(sim) {
     const c = sim.centroid();
-    camX = c.x; camY = c.y;
+    camX = c.x; viewY = 0;
   }
 
-  return { draw, resize, recenter };
+  function setZoom(z) { zoom = z; }
+  function getZoom() { return zoom; }
+
+  return { draw, resize, recenter, setZoom, getZoom };
 }

@@ -138,14 +138,13 @@ export const GOALS = {
     unit: 'm',
     score(sim, steps, extra) {
       const tx = extra.targetX, ty = extra.targetY;
-      let best = Infinity;
-      for (let i = 0; i < steps; i++) {
-        sim.step();
-        const c = sim.centroid();
-        const d = Math.hypot(c.x - tx, c.y - ty);
-        if (d < best) best = d;
-      }
-      return -best; // closer = higher score
+      // Fitness = closeness on the FINAL frame, not the closest it ever got.
+      // This rewards creatures that arrive AND stay, not ones that merely
+      // brush past the target and drift away.
+      for (let i = 0; i < steps; i++) sim.step();
+      const c = sim.centroid();
+      const d = Math.hypot(c.x - tx, c.y - ty);
+      return -d; // closer at the end = higher score
     },
   },
 };
