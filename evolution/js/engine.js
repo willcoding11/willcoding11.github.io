@@ -27,11 +27,13 @@ function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
 
 // ---- world constants ----------------------------------------------------
 export const WORLD = {
-  gravity: 0.02,
-  damping: 0.99,      // velocity retained each step
-  groundY: 6.0,       // ground plane (world units, y is DOWN)
-  stiffness: 0.9,     // spring constraint stiffness 0..1
-  iterations: 6,      // constraint solve iterations per step
+  gravity: 0.02,        // downward acceleration per step (y is DOWN)
+  airDamping: 0.997,    // velocity retained per sub-step (air resistance)
+  groundY: 6.0,         // ground plane (world units)
+  stiffness: 6.0,       // muscle spring constant k (force per unit stretch)
+  muscleDamping: 0.9,   // spring damping c (resists rapid length change)
+  maxForce: 0.6,        // MAX actuation force a muscle can exert (user-set)
+  substeps: 8,          // physics sub-steps per step (stability)
 };
 
 // ---- brain --------------------------------------------------------------
@@ -68,8 +70,9 @@ function think(brain, inputs, out, hbuf) {
 export function createSim(genome, opts = {}) {
   const world = Object.assign({}, WORLD, opts.world || {});
   const nodes = genome.nodes.map(n => ({
-    x: n.x, y: n.y, px: n.x, py: n.y,
-    friction: n.friction, onGround: false,
+    x: n.x, y: n.y, vx: 0, vy: 0,
+    friction: n.friction, mass: 1, onGround: false,
+    fx: 0, fy: 0,
   }));
   const muscles = genome.muscles.map(m => {
     const dx = genome.nodes[m.b].x - genome.nodes[m.a].x;
@@ -87,12 +90,18 @@ export function createSim(genome, opts = {}) {
 
   let t = 0;
 
+  const k = world.stiffness;
+  const c = world.muscleDamping;
+  const maxF = world.maxForce;
+  const sub = Math.max(1, world.substeps | 0);
+  const h = 1 / sub;                 // sub-step dt (sub-steps sum to dt=1)
+
   function step() {
     // --- sensors / brain inputs ---
     let avgVX = 0, avgVY = 0, contact = 0;
     for (const n of nodes) {
-      avgVX += n.x - n.px;
-      avgVY += n.y - n.py;
+      avgVX += n.vx;
+      avgVY += n.vy;
       if (n.onGround) contact++;
     }
     const inv = 1 / nodes.length;
@@ -109,39 +118,46 @@ export function createSim(genome, opts = {}) {
     think(brain, inputs, out, hbuf);
     for (let i = 0; i < muscles.length; i++) {
       const m = muscles[i];
-      m.target = m.min + (m.max - m.min) * out[i];
+      m.target = m.min + (m.max - m.min) * out[i]; // desired length this step
     }
 
-    // --- Verlet integration ---
-    for (const n of nodes) {
-      const vx = (n.x - n.px) * world.damping;
-      const vy = (n.y - n.py) * world.damping;
-      n.px = n.x; n.py = n.y;
-      n.x += vx;
-      n.y += vy + world.gravity;
-      n.onGround = false;
-    }
+    for (const n of nodes) n.onGround = false;
 
-    // --- spring + ground constraints (iterated) ---
-    for (let it = 0; it < world.iterations; it++) {
+    // --- force-based integration (semi-implicit Euler, sub-stepped) ---
+    for (let s = 0; s < sub; s++) {
+      // reset force accumulators; gravity as a body force
+      for (const n of nodes) { n.fx = 0; n.fy = world.gravity * n.mass; }
+
+      // each muscle is a DAMPED SPRING that pulls toward its target length,
+      // but the force it can exert is capped at maxForce. So a muscle can't
+      // instantly snap to length — it accelerates the nodes with limited
+      // strength and, under enough load, simply can't reach the target.
       for (const m of muscles) {
         const a = nodes[m.a], b = nodes[m.b];
         let dx = b.x - a.x, dy = b.y - a.y;
-        let d = Math.hypot(dx, dy) || 1e-6;
-        const diff = ((d - m.target) / d) * 0.5 * world.stiffness;
-        const ox = dx * diff, oy = dy * diff;
-        a.x += ox; a.y += oy;
-        b.x -= ox; b.y -= oy;
+        const d = Math.hypot(dx, dy) || 1e-6;
+        const ux = dx / d, uy = dy / d;                 // unit axis a->b
+        const stretch = d - m.target;                   // >0 too long (contract)
+        const relVel = (b.vx - a.vx) * ux + (b.vy - a.vy) * uy;
+        let Fmag = k * stretch + c * relVel;            // spring + damping
+        if (Fmag > maxF) Fmag = maxF;                   // clamp to max force
+        else if (Fmag < -maxF) Fmag = -maxF;
+        const fxc = Fmag * ux, fyc = Fmag * uy;
+        a.fx += fxc; a.fy += fyc;                       // pulls a toward b
+        b.fx -= fxc; b.fy -= fyc;
       }
-      // ground: clamp and apply friction on the last pass feel
+
+      // integrate velocity + position, then resolve the ground
       for (const n of nodes) {
+        n.vx = (n.vx + (n.fx / n.mass) * h) * world.airDamping;
+        n.vy = (n.vy + (n.fy / n.mass) * h) * world.airDamping;
+        n.x += n.vx * h;
+        n.y += n.vy * h;
         if (n.y > world.groundY) {
           n.y = world.groundY;
           n.onGround = true;
-          // kill downward velocity (no bounce)
-          n.py = n.y;
-          // horizontal friction: bleed off tangential speed
-          n.px += (n.x - n.px) * n.friction;
+          if (n.vy > 0) n.vy = 0;          // no bounce
+          n.vx *= (1 - n.friction);        // ground friction
         }
       }
     }

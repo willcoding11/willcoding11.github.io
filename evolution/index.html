@@ -121,6 +121,14 @@
           <label>Gravity
             <input id="gravity" type="number" min="0" max="0.1" step="0.005" value="0.02" />
           </label>
+          <label>Max muscle force
+            <input id="maxForce" type="number" min="0.02" max="5" step="0.02" value="0.6" />
+            <small>Strength cap — how hard a muscle can pull toward its length</small>
+          </label>
+          <label>Muscle stiffness
+            <input id="stiffness" type="number" min="0.5" max="40" step="0.5" value="6" />
+            <small>Springiness — how eagerly it moves toward its target length</small>
+          </label>
         </div>
       </details>
 

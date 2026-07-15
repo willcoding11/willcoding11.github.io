@@ -28,6 +28,8 @@ function readConfig() {
     targetY: +$('targetY').value,
     world: {
       gravity: +$('gravity').value,
+      maxForce: +$('maxForce').value,
+      stiffness: +$('stiffness').value,
     },
   };
   return cfg;
