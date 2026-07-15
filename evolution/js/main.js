@@ -20,7 +20,7 @@ function readConfig() {
     mutationStep: +$('mutationStep').value,
     crossover: $('crossover').checked,
     evolveBody: $('evolveBody').checked,
-    addNodeRate: +$('addNodeRate').value / 100,
+    nodeChangeRate: +$('nodeChange').value / 100,
     minNodes: +$('minNodes').value,
     maxNodes: +$('maxNodes').value,
     muscleDensity: +$('muscleDensity').value,
@@ -388,7 +388,7 @@ function wire() {
   showVal('killFraction', 'killFractionVal', '%');
   showVal('gradient', 'gradientVal');
   showVal('mutationRate', 'mutationRateVal', '%');
-  showVal('addNodeRate', 'addNodeRateVal', '%');
+  showVal('nodeChange', 'nodeChangeVal', '%');
   showVal('goal', null); // no-op guard
 
   // toggle target inputs by goal

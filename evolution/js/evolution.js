@@ -99,6 +99,69 @@ export function addNode(g, cfg) {
   return true;
 }
 
+// Ensure the body is a single connected graph; append muscles for any
+// stragglers. Returns how many muscles were added.
+function reconnect(g) {
+  const n = g.nodes.length;
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = x => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+  const union = (a, b) => { parent[find(a)] = find(b); };
+  for (const m of g.muscles) union(m.a, m.b);
+  let added = 0;
+  for (let i = 1; i < n; i++) {
+    if (find(i) !== find(0)) {
+      g.muscles.push({ a: i, b: i - 1, contract: rand(0.15, 0.7) });
+      union(i, i - 1);
+      added++;
+    }
+  }
+  return added;
+}
+
+// Structural mutation: remove one node, its muscles, and their brain output
+// rows; reindex the rest and reconnect if removal split the body. Never goes
+// below cfg.minNodes (clamped to >=2). Returns true if a node was removed.
+export function removeNode(g, cfg) {
+  const lo = Math.max(2, Math.round(cfg.minNodes));
+  if (g.nodes.length <= lo) return false;
+  const ri = Math.floor(Math.random() * g.nodes.length);
+  const h = g.brain.hidden;
+
+  // keep muscles not touching the removed node; remember their old w2 rows
+  const keptRows = [];
+  const newMuscles = [];
+  g.muscles.forEach((m, idx) => {
+    if (m.a === ri || m.b === ri) return;
+    newMuscles.push({
+      a: m.a > ri ? m.a - 1 : m.a,
+      b: m.b > ri ? m.b - 1 : m.b,
+      contract: m.contract,
+    });
+    keptRows.push(idx);
+  });
+  g.nodes.splice(ri, 1);
+  g.muscles = newMuscles;
+
+  // rebuild w2 from surviving rows
+  const oldW2 = g.brain.w2;
+  let w2 = new Float64Array(keptRows.length * h);
+  keptRows.forEach((oldIdx, newIdx) => {
+    for (let j = 0; j < h; j++) w2[newIdx * h + j] = oldW2[oldIdx * h + j];
+  });
+
+  // if removal disconnected the body, add bridging muscles + weight rows
+  const added = reconnect(g);
+  if (added > 0) {
+    const grown = new Float64Array(w2.length + added * h);
+    grown.set(w2, 0);
+    for (let i = w2.length; i < grown.length; i++) grown[i] = randn() * 0.8;
+    w2 = grown;
+  }
+  g.brain.w2 = w2;
+  g.brain.muscles = g.muscles.length;
+  return true;
+}
+
 // ---- mutation -----------------------------------------------------------
 export function mutate(g, cfg) {
   const r = cfg.mutationRate;          // 0..1 strength
@@ -118,16 +181,24 @@ export function mutate(g, cfg) {
     }
   }
 
-  // rare structural growth — its own rarity knob, capped at maxNodes
-  if (cfg.addNodeRate > 0 && Math.random() < cfg.addNodeRate) addNode(g, cfg);
+  // rare structural change — add OR remove a node by 1, within [min,max].
+  // If the coin-flip direction is blocked by a limit, try the other way.
+  if (cfg.nodeChangeRate > 0 && Math.random() < cfg.nodeChangeRate) {
+    if (Math.random() < 0.5) { if (!addNode(g, cfg)) removeNode(g, cfg); }
+    else { if (!removeNode(g, cfg)) addNode(g, cfg); }
+  }
 
   return g;
 }
 
 // Crossover two same-topology genomes -> child (body from A, weights mixed).
 export function crossover(a, b) {
+  // Only mix genomes with identical topology (same nodes AND muscles); after
+  // structural mutation, two genomes can share a muscle count but differ in
+  // node count, so check both before blending index-by-index.
   if (a.brain.w1.length !== b.brain.w1.length ||
-      a.brain.w2.length !== b.brain.w2.length) {
+      a.brain.w2.length !== b.brain.w2.length ||
+      a.nodes.length !== b.nodes.length) {
     return cloneGenome(Math.random() < 0.5 ? a : b);
   }
   const child = cloneGenome(a);
