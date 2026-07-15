@@ -66,6 +66,39 @@ export function cloneGenome(g) {
   };
 }
 
+// Structural mutation: grow one new node, wired to its 2 nearest neighbours
+// with fresh muscles, and extend the brain's output layer to drive them.
+// Returns true if a node was added. Never exceeds cfg.maxNodes.
+export function addNode(g, cfg) {
+  if (g.nodes.length >= cfg.maxNodes) return false;
+  const ni = g.nodes.length;
+  const anchor = g.nodes[Math.floor(Math.random() * ni)];
+  const nx = anchor.x + randn() * 0.5;
+  const ny = clamp(anchor.y + randn() * 0.5, 1.5, 5.0);
+  g.nodes.push({ x: nx, y: ny, friction: rand(0, 1) });
+
+  // connect to the nearest existing nodes (2, or 1 if that's all there is)
+  const near = [];
+  for (let i = 0; i < ni; i++)
+    near.push([i, Math.hypot(g.nodes[i].x - nx, g.nodes[i].y - ny)]);
+  near.sort((a, b) => a[1] - b[1]);
+  const conns = near.slice(0, Math.min(2, ni));
+  for (const [idx] of conns)
+    g.muscles.push({ a: idx, b: ni, contract: rand(0.15, 0.7) });
+
+  // extend brain output weights (w2 is [muscles][hidden]) with rows for the
+  // new muscles; w1 is unchanged since inputs are fixed.
+  const h = g.brain.hidden;
+  const added = conns.length;
+  const old = g.brain.w2;
+  const grown = new Float64Array(old.length + added * h);
+  grown.set(old, 0);
+  for (let i = old.length; i < grown.length; i++) grown[i] = randn() * 0.8;
+  g.brain.w2 = grown;
+  g.brain.muscles = g.muscles.length;
+  return true;
+}
+
 // ---- mutation -----------------------------------------------------------
 export function mutate(g, cfg) {
   const r = cfg.mutationRate;          // 0..1 strength
@@ -84,6 +117,10 @@ export function mutate(g, cfg) {
       if (Math.random() < r) m.contract = clamp(m.contract + randn() * 0.1, 0.05, 0.95);
     }
   }
+
+  // rare structural growth — its own rarity knob, capped at maxNodes
+  if (cfg.addNodeRate > 0 && Math.random() < cfg.addNodeRate) addNode(g, cfg);
+
   return g;
 }
 

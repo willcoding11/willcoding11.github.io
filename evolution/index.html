@@ -102,6 +102,10 @@
           <label>Mutation step size
             <input id="mutationStep" type="number" min="0.01" max="2" step="0.01" value="0.35" />
           </label>
+          <label>Add-node mutation chance <span id="addNodeRateVal">3%</span>
+            <input id="addNodeRate" type="range" min="0" max="50" value="3" />
+            <small>Chance per birth to grow a new node (never exceeds max nodes)</small>
+          </label>
           <label class="check"><input id="crossover" type="checkbox" checked /> Sexual reproduction (crossover)</label>
           <label class="check"><input id="evolveBody" type="checkbox" checked /> Evolve body (friction &amp; shape)</label>
         </div>
